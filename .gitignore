@@ -1,0 +1,11 @@
+# --- Secrets / keys (NO subir a GitHub) ---
+key/*.json
+**/*adminsdk*.json
+**/proyecto-integrador-web-pg-firebase-adminsdk-fbsvc-59ec0edf73.json
+**/serviceAccountKey.json
+**/*.pem
+**/*.p12
+
+# --- Env files ---
+.env
+.env.*
