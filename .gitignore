@@ -1,11 +1,26 @@
-# --- Secrets / keys (NO subir a GitHub) ---
-key/*.json
-**/*adminsdk*.json
-**/proyecto-integrador-web-pg-firebase-adminsdk-fbsvc-59ec0edf73.json
-**/serviceAccountKey.json
-**/*.pem
-**/*.p12
+# --- SECRETS / KEYS ---
+key/
+**/*firebase-adminsdk*.json
+**/firebase-service-account*.json
+**/serviceAccountKey*.json
 
-# --- Env files ---
-.env
-.env.*
+# Si tu auth-service estaba leyendo el json desde resources, IGUAL ignóralo
+auth-service/src/main/resources/*.json
+
+# --- JAVA / MAVEN ---
+**/target/
+*.log
+
+# --- ANGULAR ---
+**/node_modules/
+**/dist/
+**/.angular/
+**/.vite/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
