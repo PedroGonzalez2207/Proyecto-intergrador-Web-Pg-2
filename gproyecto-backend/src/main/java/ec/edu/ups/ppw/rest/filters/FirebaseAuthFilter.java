@@ -1,11 +1,12 @@
 package ec.edu.ups.ppw.rest.filters;
 
 import java.io.StringReader;
+import java.security.Principal;
 
+import ec.edu.ups.ppw.rest.security.UserPrincipal;
 import jakarta.annotation.Priority;
 import jakarta.json.Json;
 import jakarta.json.JsonObject;
-import jakarta.json.JsonValue;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
@@ -13,6 +14,7 @@ import jakarta.ws.rs.client.Invocation;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.ext.Provider;
@@ -21,17 +23,15 @@ import jakarta.ws.rs.ext.Provider;
 @Priority(Priorities.AUTHENTICATION)
 public class FirebaseAuthFilter implements ContainerRequestFilter {
 
-    // URL del que valida el token
+    // OJO: esto debe existir en Spring Boot
     private static final String AUTH_VERIFY_URL = "http://localhost:8081/api/auth/verify";
+    private static final Client CLIENT = ClientBuilder.newClient();
 
     @Override
     public void filter(ContainerRequestContext requestContext) {
 
-        if ("OPTIONS".equalsIgnoreCase(requestContext.getMethod())) {
-            return;
-        }
+        if ("OPTIONS".equalsIgnoreCase(requestContext.getMethod())) return;
 
-        // 2) Leer token
         String authHeader = requestContext.getHeaderString(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             abort(requestContext, 401, "Missing Bearer token");
@@ -44,12 +44,9 @@ public class FirebaseAuthFilter implements ContainerRequestFilter {
             return;
         }
 
-        // 3) Validar token 
-        Client client = ClientBuilder.newClient();
         Response resp = null;
-
         try {
-            Invocation.Builder req = client
+            Invocation.Builder req = CLIENT
                     .target(AUTH_VERIFY_URL)
                     .request(MediaType.APPLICATION_JSON)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
@@ -64,19 +61,29 @@ public class FirebaseAuthFilter implements ContainerRequestFilter {
             String body = resp.readEntity(String.class);
             JsonObject json = Json.createReader(new StringReader(body)).readObject();
 
-            requestContext.setProperty("uid", json.getString("uid", ""));
+            // Esperamos uid/email/name
+            String uid = json.getString("uid", "");
+            String email = json.getString("email", "");
+            String name = json.getString("name", "");
 
-            JsonValue claimsVal = json.get("claims");
-            if (claimsVal != null && claimsVal.getValueType() == JsonValue.ValueType.OBJECT) {
-                JsonObject claims = json.getJsonObject("claims");
-                requestContext.setProperty("email", claims.getString("email", ""));
-            }
+            // Rol vacío aquí, luego se puede completar con RoleAuthorizationFilter
+            final UserPrincipal principal = new UserPrincipal(uid, email, name, "");
+
+            final boolean isSecure = "https".equalsIgnoreCase(
+                    requestContext.getUriInfo().getRequestUri().getScheme()
+            );
+
+            requestContext.setSecurityContext(new SecurityContext() {
+                @Override public Principal getUserPrincipal() { return principal; }
+                @Override public boolean isUserInRole(String role) { return false; }
+                @Override public boolean isSecure() { return isSecure; }
+                @Override public String getAuthenticationScheme() { return "Bearer"; }
+            });
 
         } catch (Exception e) {
             abort(requestContext, 401, "Invalid or expired token");
         } finally {
             if (resp != null) resp.close();
-            client.close();
         }
     }
 

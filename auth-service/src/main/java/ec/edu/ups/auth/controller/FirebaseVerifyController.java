@@ -1,45 +1,60 @@
 package ec.edu.ups.auth.controller;
 
-import java.util.HashMap;
 import java.util.Map;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseToken;
+
+import ec.edu.ups.auth.dto.FirebaseLoginRequest;
+import ec.edu.ups.auth.dto.LoginResponse;
+import ec.edu.ups.auth.service.JwtService;
 
 @RestController
 @RequestMapping("/api/auth")
 public class FirebaseVerifyController {
 
-    @GetMapping("/verify")
-    public ResponseEntity<?> verify(@RequestHeader(value = "Authorization", required = false) String authHeader) {
+  private final JwtService jwtService;
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Missing Bearer token");
-        }
+  public FirebaseVerifyController(JwtService jwtService) {
+    this.jwtService = jwtService;
+  }
 
-        String idToken = authHeader.substring("Bearer ".length()).trim();
+  @PostMapping("/firebase")
+  public ResponseEntity<?> loginFirebase(@RequestBody FirebaseLoginRequest req) {
 
-        try {
-            FirebaseToken decoded = FirebaseAuth.getInstance().verifyIdToken(idToken);
-
-            Map<String, Object> payload = new HashMap<>();
-            payload.put("uid", decoded.getUid());
-            payload.put("email", decoded.getEmail());
-            payload.put("name", decoded.getName());
-            payload.put("picture", decoded.getPicture());
-            payload.put("claims", decoded.getClaims());
-
-            return ResponseEntity.ok(payload);
-
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid token");
-        }
+    if (req == null || req.idToken == null || req.idToken.isBlank()) {
+      return ResponseEntity.badRequest().body("Falta idToken");
     }
+
+    try {
+      FirebaseToken decoded = FirebaseAuth.getInstance().verifyIdToken(req.idToken.trim());
+
+      String uid = decoded.getUid();
+      String email = decoded.getEmail() != null ? decoded.getEmail() : "";
+      String name = decoded.getName() != null ? decoded.getName() : "";
+
+      // Si luego quieres rol real: lo sacamos de tu BD (UsuarioRepository) o de Firestore
+      String rol = "Usuario";
+
+      String jwt = jwtService.generateToken(
+    		  email.isBlank() ? uid : email,
+    		  Map.of("uid", uid, "email", email, "rol", rol, "name", name)
+    		);
+      
+      return ResponseEntity.ok(new LoginResponse(
+        jwt,
+        null,
+        email,
+        rol,
+        name,
+        ""
+      ));
+
+    } catch (Exception e) {
+      return ResponseEntity.status(401).body("Firebase token inválido");
+    }
+  }
 }

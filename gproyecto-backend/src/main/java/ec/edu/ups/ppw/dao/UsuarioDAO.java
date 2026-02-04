@@ -12,7 +12,8 @@ public class UsuarioDAO {
     @PersistenceContext
     private EntityManager em;
 
-    public void insert(Usuario u) { em.persist(u); }
+    public void insert(Usuario u) { em.persist(u); } 
+    public void create(Usuario u) { em.persist(u); }
     public Usuario read(Long id) { return em.find(Usuario.class, id); }
     public Usuario update(Usuario u) { return em.merge(u); }
 
@@ -25,10 +26,19 @@ public class UsuarioDAO {
             return null;
         }
     }
+
+    public Usuario findByFirebaseUid(String firebaseUid) {
+        try {
+            return em.createQuery("SELECT u FROM Usuario u WHERE u.firebaseUid = :uid", Usuario.class)
+                     .setParameter("uid", firebaseUid)
+                     .getSingleResult();
+        } catch (NoResultException ex) {
+            return null;
+        }
+    }
     
     public List<Usuario> getAll() {
         return em.createQuery("SELECT u FROM Usuario u ORDER BY u.id", Usuario.class)
                  .getResultList();
     }
-
 }

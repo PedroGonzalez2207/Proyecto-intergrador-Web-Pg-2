@@ -29,7 +29,7 @@ public class UsuarioResource {
         if (req == null || req.email == null || req.email.isBlank() || req.password == null || req.password.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST).entity("email y password son requeridos").build();
         }
-        if (req.rol == null) req.rol = Rol.CLIENTE;
+        if (req.rol == null) req.rol = Rol.Usuario;
 
         if (usuarioDAO.findByEmail(req.email) != null) {
             return Response.status(Response.Status.CONFLICT).entity("Ya existe un usuario con ese email").build();
@@ -46,7 +46,7 @@ public class UsuarioResource {
         usuarioDAO.insert(u);
 
         // Perfiles
-        if (req.rol == Rol.PROGRAMADOR) {
+        if (req.rol == Rol.Programador) {
             Programador p = new Programador();
             p.setUsuario(u);
             p.setBio("");

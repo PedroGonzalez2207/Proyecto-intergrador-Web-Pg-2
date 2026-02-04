@@ -1,10 +1,9 @@
 package ec.edu.ups.auth.config;
 
-import java.io.IOException;
+import java.io.FileInputStream;
 import java.io.InputStream;
 
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.ClassPathResource;
 
 import jakarta.annotation.PostConstruct;
 
@@ -16,17 +15,20 @@ import com.google.firebase.FirebaseOptions;
 public class FirebaseConfig {
 
   @PostConstruct
-  public void initFirebase() throws IOException {
+  public void init() throws Exception {
     if (!FirebaseApp.getApps().isEmpty()) return;
 
-    ClassPathResource resource = new ClassPathResource("proyecto-integrador-web-pg-firebase-adminsdk-fbsvc-59ec0edf73.json");
+    String path = System.getenv("GOOGLE_APPLICATION_CREDENTIALS");
+    if (path == null || path.isBlank()) {
+      throw new IllegalStateException("Falta GOOGLE_APPLICATION_CREDENTIALS (ruta al JSON de Firebase Admin)");
+    }
 
-    try (InputStream is = resource.getInputStream()) {
+    try (InputStream is = new FileInputStream(path)) {
       FirebaseOptions options = FirebaseOptions.builder()
         .setCredentials(GoogleCredentials.fromStream(is))
         .build();
       FirebaseApp.initializeApp(options);
+      System.out.println("[FirebaseConfig] Firebase Admin inicializado OK");
     }
   }
 }
-
