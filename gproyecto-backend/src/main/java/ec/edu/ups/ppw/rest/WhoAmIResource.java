@@ -1,62 +1,78 @@
 package ec.edu.ups.ppw.rest;
 
+import ec.edu.ups.ppw.dao.ProgramadorDAO;
+import ec.edu.ups.ppw.dao.UsuarioDAO;
+import ec.edu.ups.ppw.model.Programador;
+import ec.edu.ups.ppw.model.Usuario;
 import ec.edu.ups.ppw.rest.security.UserPrincipal;
 import jakarta.annotation.security.RolesAllowed;
-import jakarta.ws.rs.GET;
-import jakarta.ws.rs.Path;
-import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.core.SecurityContext;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.*;
 
 @Path("/whoami")
 public class WhoAmIResource {
+
+    @Inject
+    private UsuarioDAO usuarioDAO;
+
+    @Inject
+    private ProgramadorDAO programadorDAO;
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public Response whoami(@Context SecurityContext sc) {
         if (sc == null || sc.getUserPrincipal() == null) {
-            return Response.status(401).entity("{\"error\":\"Unauthorized\"}").build();
+            return Response.status(Response.Status.UNAUTHORIZED).entity("{\"error\":\"Unauthorized\"}").build();
+        }
+        if (!(sc.getUserPrincipal() instanceof UserPrincipal up)) {
+            return Response.status(Response.Status.UNAUTHORIZED).entity("{\"error\":\"Invalid principal\"}").build();
         }
 
-        if (!(sc.getUserPrincipal() instanceof UserPrincipal up)) {
-            return Response.status(401).entity("{\"error\":\"Invalid principal\"}").build();
+        Long usuarioId = null;
+        Long programadorId = null;
+
+        Usuario u = usuarioDAO.findByFirebaseUid(up.getUid());
+        if (u != null) {
+            usuarioId = u.getId();
+            Programador p = programadorDAO.findByUsuarioId(usuarioId);
+            if (p != null) programadorId = p.getId();
         }
 
         String json = "{"
                 + "\"uid\":\"" + safe(up.getUid()) + "\","
                 + "\"email\":\"" + safe(up.getEmail()) + "\","
                 + "\"name\":\"" + safe(up.getDisplayName()) + "\","
-                + "\"rol\":\"" + safe(up.getRol()) + "\""
+                + "\"rol\":\"" + safe(up.getRol()) + "\","
+                + "\"usuarioId\":" + (usuarioId == null ? "null" : usuarioId) + ","
+                + "\"programadorId\":" + (programadorId == null ? "null" : programadorId)
                 + "}";
 
         return Response.ok(json).build();
     }
 
-    // Solo para probar seguridad por rol (CLIENTE)
     @GET
-    @Path("/cliente")
-    @RolesAllowed({"CLIENTE"})
+    @Path("/usuario")
+    @RolesAllowed({"Usuario"})
     @Produces(MediaType.TEXT_PLAIN)
-    public String soloCliente() {
-        return "OK CLIENTE";
+    public String soloUsuario() {
+        return "OK Usuario";
     }
 
     @GET
     @Path("/programador")
-    @RolesAllowed({"PROGRAMADOR"})
+    @RolesAllowed({"Programador"})
     @Produces(MediaType.TEXT_PLAIN)
     public String soloProgramador() {
-        return "OK PROGRAMADOR";
+        return "OK Programador";
     }
 
     @GET
     @Path("/admin")
-    @RolesAllowed({"ADMIN"})
+    @RolesAllowed({"Admin"})
     @Produces(MediaType.TEXT_PLAIN)
     public String soloAdmin() {
-        return "OK ADMIN";
+        return "OK Admin";
     }
 
     private String safe(String s) {

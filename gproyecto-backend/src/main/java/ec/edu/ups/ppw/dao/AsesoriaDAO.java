@@ -1,5 +1,6 @@
 package ec.edu.ups.ppw.dao;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 import ec.edu.ups.ppw.model.Asesoria;
@@ -18,23 +19,49 @@ public class AsesoriaDAO {
     public Asesoria update(Asesoria a) { return em.merge(a); }
 
     public List<Asesoria> listByCliente(Long clienteId) {
-        return em.createQuery("SELECT a FROM Asesoria a WHERE a.cliente.id = :cid ORDER BY a.fechaInicio DESC",
-                              Asesoria.class)
-                 .setParameter("cid", clienteId)
-                 .getResultList();
+        return em.createQuery(
+                "SELECT a FROM Asesoria a " +
+                "WHERE a.cliente.id = :cid " +
+                "ORDER BY a.fechaInicio DESC",
+                Asesoria.class
+        ).setParameter("cid", clienteId)
+         .getResultList();
     }
 
     public List<Asesoria> listByProgramador(Long programadorId) {
-        return em.createQuery("SELECT a FROM Asesoria a WHERE a.programador.id = :pid ORDER BY a.fechaInicio DESC",
-                              Asesoria.class)
-                 .setParameter("pid", programadorId)
-                 .getResultList();
+        return em.createQuery(
+                "SELECT a FROM Asesoria a " +
+                "WHERE a.programador.id = :pid " +
+                "ORDER BY a.fechaInicio DESC",
+                Asesoria.class
+        ).setParameter("pid", programadorId)
+         .getResultList();
     }
 
-    public List<Asesoria> listByEstado(EstadoAsesoria estado) {
-        return em.createQuery("SELECT a FROM Asesoria a WHERE a.estado = :e ORDER BY a.fechaInicio DESC",
-                              Asesoria.class)
-                 .setParameter("e", estado)
-                 .getResultList();
+    public List<Asesoria> listByProgramadorAndEstado(Long programadorId, EstadoAsesoria estado) {
+        return em.createQuery(
+                "SELECT a FROM Asesoria a " +
+                "WHERE a.programador.id = :pid AND a.estado = :e " +
+                "ORDER BY a.fechaInicio DESC",
+                Asesoria.class
+        ).setParameter("pid", programadorId)
+         .setParameter("e", estado)
+         .getResultList();
+    }
+
+    public boolean existsOverlappingProgramador(Long programadorId, LocalDateTime inicio, LocalDateTime fin) {
+        Long count = em.createQuery(
+                "SELECT COUNT(a) FROM Asesoria a " +
+                "WHERE a.programador.id = :pid " +
+                "AND a.estado <> :rech " +
+                "AND ( :inicio < a.fechaFin AND :fin > a.fechaInicio )",
+                Long.class
+        ).setParameter("pid", programadorId)
+         .setParameter("rech", EstadoAsesoria.Rechazada)
+         .setParameter("inicio", inicio)
+         .setParameter("fin", fin)
+         .getSingleResult();
+
+        return count != null && count > 0;
     }
 }

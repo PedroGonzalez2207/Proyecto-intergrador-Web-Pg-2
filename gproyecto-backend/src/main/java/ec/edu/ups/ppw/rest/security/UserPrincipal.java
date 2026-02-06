@@ -7,7 +7,7 @@ public class UserPrincipal implements Principal {
     private final String uid;
     private final String email;
     private final String name;
-    private final String rol; // ADMIN | PROGRAMADOR | CLIENTE
+    private final String rol;
 
     public UserPrincipal(String uid, String email, String name, String rol) {
         this.uid = uid;
@@ -18,7 +18,7 @@ public class UserPrincipal implements Principal {
 
     @Override
     public String getName() {
-        return uid; // estable
+        return uid;
     }
 
     public String getUid() { return uid; }

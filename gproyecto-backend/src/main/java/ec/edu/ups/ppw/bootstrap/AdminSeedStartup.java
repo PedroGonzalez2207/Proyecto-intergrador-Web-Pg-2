@@ -12,43 +12,41 @@ import jakarta.inject.Inject;
 @Startup
 public class AdminSeedStartup {
 
-    // TODO: PON AQUI TU CORREO ADMIN
-	private static final String ADMIN_EMAIL = "pedrojose.g2207@gmail.com";
+    private static final String ADMIN_EMAIL = "pedrojose.g2207@gmail.com";
 
     @Inject
     private UsuarioDAO usuarioDAO;
 
     @PostConstruct
     public void init() {
-        if (ADMIN_EMAIL == null || ADMIN_EMAIL.isBlank() || ADMIN_EMAIL.contains("pedrojose.g2207@gmail.com")) {
+        if (ADMIN_EMAIL == null || ADMIN_EMAIL.isBlank()) {
             System.out.println("[AdminSeed] ADMIN_EMAIL no configurado. No se crea admin.");
             return;
         }
 
-        Usuario existing = usuarioDAO.findByEmail(ADMIN_EMAIL);
+        String email = ADMIN_EMAIL.trim().toLowerCase();
+
+        Usuario existing = usuarioDAO.findByEmail(email);
         if (existing != null) {
-            // Si ya existe, asegurar que sea ADMIN
             if (existing.getRol() != Rol.Admin) {
                 existing.setRol(Rol.Admin);
                 usuarioDAO.update(existing);
-                System.out.println("[AdminSeed] Usuario existente promovido a ADMIN: " + ADMIN_EMAIL);
+                System.out.println("[AdminSeed] Usuario existente promovido a Admin: " + email);
             } else {
-                System.out.println("[AdminSeed] Admin ya existe: " + ADMIN_EMAIL);
+                System.out.println("[AdminSeed] Admin ya existe: " + email);
             }
             return;
         }
 
         Usuario admin = new Usuario();
-        admin.setEmail(ADMIN_EMAIL);
+        admin.setEmail(email);
         admin.setRol(Rol.Admin);
         admin.setNombres("Admin");
         admin.setApellidos("Sistema");
         admin.setActivo(true);
-
-        // firebaseUid queda NULL hasta que ese correo haga login por Firebase y pase por /api/me
         admin.setFirebaseUid(null);
 
-        usuarioDAO.create(admin);
-        System.out.println("[AdminSeed] Admin creado: " + ADMIN_EMAIL);
+        usuarioDAO.insert(admin);
+        System.out.println("[AdminSeed] Admin creado: " + email);
     }
 }

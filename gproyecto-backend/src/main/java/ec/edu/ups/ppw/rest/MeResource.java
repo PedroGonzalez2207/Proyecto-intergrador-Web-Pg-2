@@ -32,68 +32,38 @@ public class MeResource {
         }
 
         String uid = up.getUid();
-        String email = up.getEmail();
-        String fullName = up.getDisplayName();
+        String email = up.getEmail() == null ? "" : up.getEmail().trim().toLowerCase();
+        String fullName = up.getDisplayName() == null ? "" : up.getDisplayName().trim();
 
-        // 1) Buscar por firebaseUid
         Usuario u = usuarioDAO.findByFirebaseUid(uid);
 
-        // 2) Si no existe por uid, buscar por email (para emparejar seed/admin)
-        if (u == null && email != null && !email.isBlank()) {
+        if (u == null && !email.isBlank()) {
             u = usuarioDAO.findByEmail(email);
             if (u != null) {
-                // Emparejar firebaseUid y actualizar datos básicos
                 u.setFirebaseUid(uid);
-
-                if (fullName != null && !fullName.isBlank()) {
-                    String[] parts = fullName.trim().split("\\s+");
-                    if (parts.length == 1) {
-                        u.setNombres(parts[0]);
-                        if (u.getApellidos() == null) u.setApellidos("");
-                    } else {
-                        u.setNombres(parts[0]);
-                        u.setApellidos(String.join(" ", java.util.Arrays.copyOfRange(parts, 1, parts.length)));
-                    }
-                }
+                aplicarNombre(u, fullName);
                 u = usuarioDAO.update(u);
             }
         }
 
-        // 3) Si aún no existe, crear como CLIENTE
         if (u == null) {
             u = new Usuario();
             u.setFirebaseUid(uid);
-            u.setEmail(email);
-
-            String[] parts = (fullName == null ? "" : fullName.trim()).split("\\s+");
-            if (parts.length == 0 || parts[0].isBlank()) {
-                u.setNombres("Usuario");
-                u.setApellidos("");
-            } else if (parts.length == 1) {
-                u.setNombres(parts[0]);
-                u.setApellidos("");
-            } else {
-                u.setNombres(parts[0]);
-                u.setApellidos(String.join(" ", java.util.Arrays.copyOfRange(parts, 1, parts.length)));
-            }
-
+            u.setEmail(email.isBlank() ? (uid + "@firebase.local") : email);
+            aplicarNombre(u, fullName);
             u.setRol(Rol.Usuario);
-            usuarioDAO.create(u);
+            u.setActivo(true);
+            usuarioDAO.insert(u);
         } else {
-            // 4) Si existe, actualizar email/nombre si cambiaron (sin tocar rol)
             boolean changed = false;
 
-            if (email != null && !email.isBlank() && !email.equals(u.getEmail())) {
+            if (!email.isBlank() && (u.getEmail() == null || !email.equalsIgnoreCase(u.getEmail().trim()))) {
                 u.setEmail(email);
                 changed = true;
             }
 
-            if ((u.getNombres() == null || u.getNombres().isBlank()) && fullName != null && !fullName.isBlank()) {
-                String[] parts = fullName.trim().split("\\s+");
-                u.setNombres(parts[0]);
-                if (parts.length > 1) {
-                    u.setApellidos(String.join(" ", java.util.Arrays.copyOfRange(parts, 1, parts.length)));
-                }
+            if ((u.getNombres() == null || u.getNombres().isBlank()) && !fullName.isBlank()) {
+                aplicarNombre(u, fullName);
                 changed = true;
             }
 
@@ -102,7 +72,6 @@ public class MeResource {
             }
         }
 
-        // 5) Respuesta
         String json =
                 "{"
                 + "\"id\":" + u.getId() + ","
@@ -117,6 +86,28 @@ public class MeResource {
                 + "}";
 
         return Response.ok(json).build();
+    }
+
+    private void aplicarNombre(Usuario u, String fullName) {
+        if (fullName == null || fullName.isBlank()) {
+            if (u.getNombres() == null || u.getNombres().isBlank()) u.setNombres("Usuario");
+            if (u.getApellidos() == null) u.setApellidos("");
+            return;
+        }
+
+        String[] parts = fullName.trim().split("\\s+");
+        if (parts.length == 1) {
+            u.setNombres(parts[0]);
+            if (u.getApellidos() == null) u.setApellidos("");
+        } else {
+            u.setNombres(parts[0]);
+            StringBuilder ap = new StringBuilder();
+            for (int i = 1; i < parts.length; i++) {
+                if (i > 1) ap.append(" ");
+                ap.append(parts[i]);
+            }
+            u.setApellidos(ap.toString());
+        }
     }
 
     private String safe(String s) {

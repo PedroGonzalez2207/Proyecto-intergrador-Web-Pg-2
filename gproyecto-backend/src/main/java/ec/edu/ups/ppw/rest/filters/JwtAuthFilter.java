@@ -57,7 +57,9 @@ public class JwtAuthFilter implements ContainerRequestFilter {
             if (uid.isBlank()) uid = subject;
             if (email.isBlank()) email = subject;
 
-            final UserPrincipal principal = new UserPrincipal(uid, email, "", rol);
+            String name = str(c.get("name"));
+            final UserPrincipal principal = new UserPrincipal(uid, email, name, rol);
+
             final boolean isSecure = requestContext.getUriInfo().getRequestUri().getScheme().equalsIgnoreCase("https");
 
             requestContext.setSecurityContext(new SecurityContext() {

@@ -20,7 +20,6 @@ import jakarta.ws.rs.ext.Provider;
 @Priority(Priorities.AUTHORIZATION)
 public class RoleAuthorizationFilter implements ContainerRequestFilter {
 
-    // ✅ Emails admin (siempre en minúsculas)
     private static final Set<String> ADMIN_EMAILS = Set.of(
         "pedrojose.g2207@gmail.com"
     );
@@ -44,7 +43,7 @@ public class RoleAuthorizationFilter implements ContainerRequestFilter {
         }
 
         String uid = safe(up.getUid());
-        String email = safe(up.getEmail()).toLowerCase();        // normalizado
+        String email = safe(up.getEmail()).toLowerCase();
         String displayName = safe(up.getDisplayName());
 
         if (uid.isBlank()) {
@@ -52,99 +51,84 @@ public class RoleAuthorizationFilter implements ContainerRequestFilter {
             return;
         }
 
-        try {
-            // 1) Buscar por firebaseUid
-            Usuario u = usuarioDAO.findByFirebaseUid(uid);
+        Usuario u = usuarioDAO.findByFirebaseUid(uid);
 
-            // 2) Si no existe, intenta por email y vincula uid
-            if (u == null && !email.isBlank()) {
-                u = usuarioDAO.findByEmail(email);
-                if (u != null && isBlank(u.getFirebaseUid())) {
-                    u.setFirebaseUid(uid);
-                    u = usuarioDAO.update(u);
-                }
+        if (u == null && !email.isBlank()) {
+            u = usuarioDAO.findByEmail(email);
+            if (u != null && isBlank(u.getFirebaseUid())) {
+                u.setFirebaseUid(uid);
+                u = usuarioDAO.update(u);
+            }
+        }
+
+        if (u == null) {
+            u = new Usuario();
+            u.setFirebaseUid(uid);
+            u.setEmail(email.isBlank() ? (uid + "@firebase.local") : email);
+            u.setNombres(displayName.isBlank() ? (email.isBlank() ? "Usuario" : email) : displayName);
+            u.setApellidos("");
+            u.setActivo(true);
+            u.setRol((!email.isBlank() && ADMIN_EMAILS.contains(email)) ? Rol.Admin : Rol.Usuario);
+            usuarioDAO.insert(u);
+        } else {
+            boolean changed = false;
+
+            if (!email.isBlank() && (u.getEmail() == null || !u.getEmail().equalsIgnoreCase(email))) {
+                u.setEmail(email);
+                changed = true;
             }
 
-            // 3) Si no existe -> crear
-            if (u == null) {
-                u = new Usuario();
-                u.setFirebaseUid(uid);
-                u.setEmail(email.isBlank() ? (uid + "@firebase.local") : email);
-                u.setNombres(displayName.isBlank() ? "Usuario" : displayName);
-                u.setApellidos("");
-                u.setActivo(true);
-
-                // ✅ rol default: si email está en allowlist -> ADMIN, sino USUARIO
-                Rol rolDefault = (!email.isBlank() && ADMIN_EMAILS.contains(email)) ? Rol.Admin : Rol.Usuario;
-                u.setRol(rolDefault);
-
-                usuarioDAO.insert(u);
-
-            } else {
-                // 4) Mantener datos actualizados (si llegan desde Firebase)
-                boolean changed = false;
-
-                if (!email.isBlank() && (u.getEmail() == null || !u.getEmail().equalsIgnoreCase(email))) {
-                    u.setEmail(email);
-                    changed = true;
-                }
-
-                if (!displayName.isBlank() && (u.getNombres() == null || !u.getNombres().equals(displayName))) {
+            if (!displayName.isBlank()) {
+                String currentName = safe(u.getNombres());
+                if (currentName.isBlank() || currentName.equalsIgnoreCase("usuario")) {
                     u.setNombres(displayName);
                     changed = true;
                 }
-
-                // 5) Si ya existe y su email está en allowlist => forzar ADMIN
-                if (!email.isBlank() && ADMIN_EMAILS.contains(email) && u.getRol() != Rol.Admin) {
-                    u.setRol(Rol.Admin);
-                    changed = true;
-                }
-
-                // 6) Rol default si viene nulo
-                if (u.getRol() == null) {
-                    u.setRol(Rol.Usuario);
-                    changed = true;
-                }
-
-                if (changed) {
-                    u = usuarioDAO.update(u);
-                }
             }
 
-            final String rolDb = (u.getRol() == null) ? Rol.Usuario.name() : u.getRol().name();
-            final boolean isSecure = sc.isSecure();
+            if (!email.isBlank() && ADMIN_EMAILS.contains(email) && u.getRol() != Rol.Admin) {
+                u.setRol(Rol.Admin);
+                changed = true;
+            }
 
-            final UserPrincipal enriched = new UserPrincipal(
+            if (u.getRol() == null) {
+                u.setRol(Rol.Usuario);
+                changed = true;
+            }
+
+            if (changed) {
+                u = usuarioDAO.update(u);
+            }
+        }
+
+        final String rolDb = u.getRol() == null ? Rol.Usuario.name() : u.getRol().name();
+        final boolean isSecure = sc.isSecure();
+
+        final UserPrincipal enriched = new UserPrincipal(
                 uid,
                 u.getEmail(),
                 u.getNombres(),
                 rolDb
-            );
+        );
 
-            requestContext.setSecurityContext(new SecurityContext() {
-                @Override public Principal getUserPrincipal() { return enriched; }
+        requestContext.setSecurityContext(new SecurityContext() {
+            @Override public Principal getUserPrincipal() { return enriched; }
 
-                @Override public boolean isUserInRole(String role) {
-                    if (role == null) return false;
+            @Override public boolean isUserInRole(String role) {
+                if (role == null) return false;
 
-                    // ✅ Admin entra a todo
-                    if ("Admin".equalsIgnoreCase(enriched.getRol())) return true;
+                if ("Admin".equalsIgnoreCase(enriched.getRol())) return true;
 
-                    // match directo
-                    return role.equalsIgnoreCase(enriched.getRol());
-                }
+                if ("ADMIN".equalsIgnoreCase(role)) role = "Admin";
+                if ("PROGRAMADOR".equalsIgnoreCase(role)) role = "Programador";
+                if ("USUARIO".equalsIgnoreCase(role) || "CLIENTE".equalsIgnoreCase(role)) role = "Usuario";
 
-                @Override public boolean isSecure() { return isSecure; }
-                @Override public String getAuthenticationScheme() { return "Bearer"; }
-            });
+                return role.equalsIgnoreCase(enriched.getRol());
+            }
 
-        } catch (Exception e) {
-            requestContext.abortWith(
-                Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity("Auth error")
-                    .build()
-            );
-        }
+            @Override public boolean isSecure() { return isSecure; }
+            @Override public String getAuthenticationScheme() { return "Bearer"; }
+        });
     }
 
     private static String safe(String s) {

@@ -15,21 +15,18 @@ public class Usuario {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Identificador estable del usuario Firebase
     @Column(name="firebase_uid", nullable=true, length=80)
     private String firebaseUid;
 
     @Column(nullable=false, length=120)
     private String email;
 
-    // Para Firebase no aplica. Para login propio en el futuro sí.
     @Column(name="password_hash", nullable=true, length=200)
     private String passwordHash;
 
     @Column(nullable=false, length=120)
     private String nombres;
 
-    // A veces no lo tendrás separado al inicio, así que lo permitimos null
     @Column(nullable=true, length=120)
     private String apellidos;
 

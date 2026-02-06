@@ -36,7 +36,6 @@ public class FirebaseVerifyController {
       String email = decoded.getEmail() != null ? decoded.getEmail() : "";
       String name = decoded.getName() != null ? decoded.getName() : "";
 
-      // Si luego quieres rol real: lo sacamos de tu BD (UsuarioRepository) o de Firestore
       String rol = "Usuario";
 
       String jwt = jwtService.generateToken(
