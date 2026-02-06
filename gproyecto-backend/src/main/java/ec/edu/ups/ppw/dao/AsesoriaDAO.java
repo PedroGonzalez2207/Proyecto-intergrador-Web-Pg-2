@@ -18,6 +18,22 @@ public class AsesoriaDAO {
     public Asesoria read(Long id) { return em.find(Asesoria.class, id); }
     public Asesoria update(Asesoria a) { return em.merge(a); }
 
+    public Asesoria readFull(Long id) {
+        try {
+            return em.createQuery(
+                "SELECT a FROM Asesoria a " +
+                "JOIN FETCH a.cliente " +
+                "JOIN FETCH a.programador " +
+                "JOIN FETCH a.programador.usuario " +
+                "WHERE a.id = :id",
+                Asesoria.class
+            ).setParameter("id", id)
+             .getSingleResult();
+        } catch (NoResultException e) {
+            return null;
+        }
+    }
+
     public List<Asesoria> listByCliente(Long clienteId) {
         return em.createQuery(
                 "SELECT a FROM Asesoria a " +

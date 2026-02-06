@@ -10,6 +10,7 @@ import ec.edu.ups.ppw.dao.AsesoriaDAO;
 import ec.edu.ups.ppw.dao.DisponibilidadDAO;
 import ec.edu.ups.ppw.dao.ProgramadorDAO;
 import ec.edu.ups.ppw.dao.UsuarioDAO;
+import ec.edu.ups.ppw.integrations.PythonServiceClient;
 import ec.edu.ups.ppw.model.Asesoria;
 import ec.edu.ups.ppw.model.EstadoAsesoria;
 import ec.edu.ups.ppw.model.Programador;
@@ -19,6 +20,7 @@ import ec.edu.ups.ppw.rest.dto.RechazoRequest;
 import ec.edu.ups.ppw.rest.security.UserPrincipal;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ejb.EJB;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
 
@@ -31,6 +33,10 @@ public class AsesoriaResource {
     @EJB private UsuarioDAO usuarioDAO;
     @EJB private ProgramadorDAO programadorDAO;
     @EJB private DisponibilidadDAO disponibilidadDAO;
+
+    @Inject private PythonServiceClient python;
+
+    private static final String ADMIN_TELEGRAM_CHAT_ID = "6370661935";
 
     @POST
     @RolesAllowed({"Usuario", "Admin"})
@@ -45,7 +51,7 @@ public class AsesoriaResource {
         Usuario cliente = usuarioDAO.findByFirebaseUid(up.getUid());
         if (cliente == null) return Response.status(Response.Status.NOT_FOUND).entity("Usuario no existe en BD").build();
 
-        Programador prog = programadorDAO.read(req.programadorId);
+        Programador prog = programadorDAO.readWithUsuario(req.programadorId);
         if (prog == null) return Response.status(Response.Status.NOT_FOUND).entity("Programador no existe").build();
 
         LocalDateTime inicio;
@@ -91,6 +97,36 @@ public class AsesoriaResource {
         }
 
         asesoriaDAO.insert(a);
+
+        try {
+            String toProg = (prog.getUsuario() != null) ? prog.getUsuario().getEmail() : null;
+
+            String subject = "Nueva solicitud de asesoría";
+            String text =
+                    "Hola,\n\n" +
+                    "Tienes una nueva solicitud de asesoría.\n\n" +
+                    "Cliente: " + safe(cliente.getNombres()) + " " + safe(cliente.getApellidos()) + "\n" +
+                    "Correo cliente: " + safe(cliente.getEmail()) + "\n" +
+                    "Inicio: " + inicio + "\n" +
+                    "Fin: " + fin + "\n" +
+                    "Modalidad: " + req.modalidad + "\n" +
+                    (a.getComentario() != null ? ("Comentario: " + a.getComentario() + "\n") : "") +
+                    "\nRevisa tu panel para aprobar o rechazar.";
+
+            String replyTo = cliente.getEmail();
+            python.sendEmail(toProg, subject, text, replyTo);
+
+
+            python.sendTelegram(
+                ADMIN_TELEGRAM_CHAT_ID,
+                "Nueva asesoría creada: " + safe(cliente.getEmail()) +
+                " -> ProgID " + req.programadorId +
+                " (" + inicio + " a " + fin + ")"
+            );
+        } catch (Exception e) {
+            System.out.println("Notif error (solicitar): " + e.getMessage());
+        }
+
         return Response.status(Response.Status.CREATED).entity(a).build();
     }
 
@@ -142,7 +178,7 @@ public class AsesoriaResource {
         UserPrincipal up = principal(sc);
         if (up == null) return Response.status(Response.Status.UNAUTHORIZED).entity("Unauthorized").build();
 
-        Asesoria a = asesoriaDAO.read(asesoriaId);
+        Asesoria a = asesoriaDAO.readFull(asesoriaId);
         if (a == null) return Response.status(Response.Status.NOT_FOUND).entity("Asesoría no existe").build();
 
         if (sc != null && sc.isUserInRole("Programador")) {
@@ -161,11 +197,43 @@ public class AsesoriaResource {
         }
 
         asesoriaDAO.update(a);
+
+        try {
+            String userTo = (a.getCliente() != null) ? a.getCliente().getEmail() : null;
+
+            String subject = "Tu asesoría fue " + (nuevoEstado == EstadoAsesoria.Aprobada ? "APROBADA" : "RECHAZADA");
+            String text =
+                    "Hola,\n\n" +
+                    "Tu solicitud de asesoría ha sido " + (nuevoEstado == EstadoAsesoria.Aprobada ? "APROBADA" : "RECHAZADA") + ".\n\n" +
+                    "Inicio: " + a.getFechaInicio() + "\n" +
+                    "Fin: " + a.getFechaFin() + "\n" +
+                    "Modalidad: " + a.getModalidad() + "\n" +
+                    (a.getMensajeRespuesta() != null ? ("Mensaje del programador: " + a.getMensajeRespuesta() + "\n") : "") +
+                    "\nGracias.";
+
+            String replyTo = (a.getProgramador() != null && a.getProgramador().getUsuario() != null)
+                    ? a.getProgramador().getUsuario().getEmail()
+                    : null;
+
+            python.sendEmail(userTo, subject, text, replyTo);
+
+            python.sendTelegram(
+                ADMIN_TELEGRAM_CHAT_ID,
+                "Asesoría #" + a.getId() + " -> " + nuevoEstado + " | cliente: " + safe(userTo)
+            );
+        } catch (Exception e) {
+            System.out.println("Notif error (cambiarEstado): " + e.getMessage());
+        }
+
         return Response.ok(a).build();
     }
 
     private UserPrincipal principal(SecurityContext sc) {
         if (sc == null || sc.getUserPrincipal() == null) return null;
         return (sc.getUserPrincipal() instanceof UserPrincipal up) ? up : null;
+    }
+
+    private String safe(String s) {
+        return (s == null) ? "" : s;
     }
 }
